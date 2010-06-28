@@ -38,6 +38,8 @@
 #endif
 
 static char *defTabooExts[] = { ".rpmsave", ".rpmorig", "~", ",v",
+    ".disabled", ".dpkg-old", ".dpkg-dist", ".dpkg-new", ".cfsaved",
+    ".ucf-old", ".ucf-dist", ".ucf-new",
     ".rpmnew", ".swp", ".cfsaved", ".rhn-cfg-tmp-*"
 };
 static int defTabooCount = sizeof(defTabooExts) / sizeof(char *);
@@ -575,9 +577,34 @@ static int readConfigFile(const char *configFile, struct logInfo *defConfig)
 			    configFile, lineNum);
 		    goto error;
 		} else if (*start == '\n') {
-		    lineNum++;
+		    while (isspace(*start) && (*start)) {
+			if (*start == '\n')
+			    lineNum++;
+			start++;
+		    }
+		} else if (
+		    (strncmp(start, "postrotate", 10) == 0) ||
+		    (strncmp(start, "prerotate", 9) == 0) ||
+		    (strncmp(start, "firstrotate", 11) == 0) ||
+		    (strncmp(start, "lastrotate", 10) == 0)
+		    )
+		{
+		    while (*start) {
+			while ((*start != '\n') && (*start))
+			    start++;
+			while (isspace(*start) && (*start)) {
+			    if (*start == '\n')
+				lineNum++;
+			    start++;
+			}
+			if (strncmp(start, "endscript", 9) == 0) {
+			    start += 9;
+			    break;
+			}
+		    }
+		} else {
+		    start++;
 		}
-		start++;
 	    }
 	    start++;
 
@@ -1083,15 +1110,15 @@ static int readConfigFile(const char *configFile, struct logInfo *defConfig)
 		    *endtag = oldchar, start = endtag;
 		}
 	    } else if (!strcmp(start, "include")) {
-		if (newlog != defConfig) {
-		    message(MESS_ERROR,
-			    "%s:%d include may not appear inside "
-			    "of log file definition\n", configFile,
-			    lineNum);
-		    *endtag = oldchar, start = endtag;
-		    logerror = 1;
-		    continue;
-		}
+// 		if (newlog != defConfig) {
+// 		    message(MESS_ERROR,
+// 			    "%s:%d include may not appear inside "
+// 			    "of log file definition\n", configFile,
+// 			    lineNum);
+// 		    *endtag = oldchar, start = endtag;
+// 		    logerror = 1;
+// 		    continue;
+// 		}
 
 		*endtag = oldchar, start = endtag;
 		if (!isolateValue(configFile, lineNum, "include", &start,
@@ -1105,7 +1132,7 @@ static int readConfigFile(const char *configFile, struct logInfo *defConfig)
 				--recursion_depth;
 				goto error;
 			}
-		    if (readConfigPath(start, defConfig)) {
+		    if (readConfigPath(start, newlog)) {
 				--recursion_depth;
 				goto error;
 			}

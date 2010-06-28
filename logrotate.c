@@ -14,6 +14,8 @@
 #include <unistd.h>
 #include <glob.h>
 #include <locale.h>
+#include <sys/types.h>
+#include <utime.h>
 
 #if defined(SunOS) 
 #include <syslimits.h>
@@ -279,6 +281,7 @@ static int compressLogFile(char *name, struct logInfo *log, struct stat *sb)
 {
     char *compressedName;
     const char **fullCommand;
+    struct utimbuf utim;
     int inFile;
     int outFile;
     int i;
@@ -329,6 +332,12 @@ static int compressLogFile(char *name, struct logInfo *log, struct stat *sb)
 	message(MESS_ERROR, "failed to compress log %s\n", name);
 	return 1;
     }
+
+    utim.actime = sb->st_atime;
+    utim.modtime = sb->st_mtime;
+    utime(compressedName,&utim);
+    /* If we can't change atime/mtime, it's not a disaster.
+       It might possibly fail under SELinux. */
 
     shred_file(name, log);
 
@@ -1080,6 +1089,7 @@ int rotateSingleLog(struct logInfo *log, int logNum, struct logState *state,
 		message(MESS_ERROR, "failed to rename %s to %s: %s\n",
 			log->files[logNum], rotNames->finalName,
 			strerror(errno));
+			hasErrors = 1;
 	    }
 
 	    if (!log->rotateCount) {
@@ -1232,7 +1242,7 @@ int rotateLogSet(struct logInfo *log, int force)
 	message(MESS_DEBUG, "empty log files are not rotated, ");
 
     if (log->minsize) 
-	message(MESS_DEBUG, "only log files >= %d bytes are rotated, ",	log->minsize);
+	message(MESS_DEBUG, "only log files >= %llu bytes are rotated, ",	log->minsize);
 
     if (log->logAddress) {
 	message(MESS_DEBUG, "old logs mailed to %s\n", log->logAddress);
@@ -1293,7 +1303,7 @@ int rotateLogSet(struct logInfo *log, int force)
 			"since no logs will be rotated\n");
 	    } else {
 		message(MESS_DEBUG, "running prerotate script\n");
-		if (runScript(log->pattern, log->pre)) {
+		if (runScript(log->flags & LOG_FLAG_SHAREDSCRIPTS ? log->pattern : log->files[j], log->pre)) {
 		    if (log->flags & LOG_FLAG_SHAREDSCRIPTS)
 			message(MESS_ERROR,
 				"error running shared prerotate script "
@@ -1328,7 +1338,7 @@ int rotateLogSet(struct logInfo *log, int force)
 			"since no logs were rotated\n");
 	    } else {
 		message(MESS_DEBUG, "running postrotate script\n");
-		if (runScript(log->pattern, log->post)) {
+		if (runScript(log->flags & LOG_FLAG_SHAREDSCRIPTS ? log->pattern : log->files[j], log->post)) {
 		    if (log->flags & LOG_FLAG_SHAREDSCRIPTS)
 			message(MESS_ERROR,
 				"error running shared postrotate script "
