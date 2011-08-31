@@ -48,6 +48,10 @@ static acl_t prev_acl = NULL;
 #define STATEFILE_BUFFER_SIZE 4096
 #endif
 
+#ifdef __hpux
+extern int asprintf(char **str, const char *fmt, ...);
+#endif
+
 struct logState {
     char *fn;
     struct tm lastRotated;	/* only tm.mon, tm_mday, tm_year are good! */
@@ -786,9 +790,10 @@ int findNeedRotating(struct logInfo *log, int logNum)
 	}
 	if (log->minsize && sb.st_size < log->minsize)
 	    state->doRotate = 0;
-	if (log->maxsize && sb.st_size > log->maxsize)
-	    state->doRotate = 1;
     }
+
+    if (log->maxsize && sb.st_size > log->maxsize)
+        state->doRotate = 1;
 
     /* The notifempty flag overrides the normal criteria */
     if (!(log->flags & LOG_FLAG_IFEMPTY) && !sb.st_size)
